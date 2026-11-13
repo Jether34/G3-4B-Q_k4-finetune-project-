@@ -21,7 +21,7 @@ A local control center and experimentation workspace for Gemma 3 4B. The project
 - `kaggle/Kaggle-Gemma3-4B-Vision.ipynb` and `.py` are the upstream Unsloth reference files kept for comparison.
 - `kaggle/KAGGLE-START-HERE.md` contains the Kaggle setup notes.
 
-The Ollama manifest and model blobs stay local and are excluded from Git because the language and vision files are multi-gigabyte artifacts. Install the model locally with `ollama pull gemma3:4b` instead of expecting the repository checkout to contain its weights.
+The Ollama manifest and model blobs stay local and are excluded from Git because the language and vision files are multi-gigabyte artifacts. Install the model locally with `ollama pull gemma3:4b` instead of expecting the repository checkout to contain its weights. [MODEL_SHA256SUMS.txt](MODEL_SHA256SUMS.txt) records the SHA-256 checksums of the exact local model and vision-projector blobs used when this project snapshot was prepared, along with their Ollama manifest identifiers. The `gemma3:4b` tag can move; the recorded hashes describe the local snapshot, not a guarantee about every future pull of that tag.
 
 ## Requirements
 
