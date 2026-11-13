@@ -1,0 +1,13 @@
+
+# Local Ollama snapshot files are large; install the model with `ollama pull gemma3:4b`.
+/ollama-manifest.json
+/sha256-*
+
+# Local training outputs, credentials, and generated files.
+/gemma_3_lora/
+*.safetensors
+*.gguf
+.env
+.venv/
+__pycache__/
+.ipynb_checkpoints/
