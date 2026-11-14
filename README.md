@@ -76,29 +76,15 @@ The animated connections are a visual guide, not model weights or prompt-depende
 
 The text block count and widths are read from the installed Ollama model metadata where available. Vision dimensions use the released configuration. See Google's [Gemma 3 4B configuration](https://github.com/google/gemma_pytorch/blob/main/gemma/config.py), the [Gemma 3 decoder implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/gemma3/modular_gemma3.py), and the [gated MLP implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/gemma2/modeling_gemma2.py).
 
-## Local refusal-direction experiment
+## Weight-space guardrail research
 
-Windows Application Control blocks the native PyArrow extension required by Heretic in this environment. The default `abliteration/run.ps1` workflow therefore uses a small direct Transformers implementation instead. It does not import Heretic, `datasets`, or PyArrow. It captures per-layer residual-stream directions from locally defined contrastive prompts using the gated Hugging Face `google/gemma-3-4b-it` checkpoint, then stores those vectors and metadata under `artifacts/gemma-3-4b-it-direction/`.
+The previous runtime-steering experiment has been removed. The current workflow captures one residual-stream direction in memory, then applies a rank-one orthogonalization to a separate copy of the BF16 Hugging Face checkpoint. It does not save a runtime steering vector. The source checkpoint and existing Ollama model remain untouched.
 
-The capture uses bitsandbytes NF4 4-bit loading and prefers BF16 compute when the GPU supports it, falling back to FP16 otherwise. It requires Python 3.12, a CUDA-capable PyTorch setup, Hugging Face access to the checkpoint, and acceptance of Google's Gemma terms. The launcher checks account access before the model download and uses the Hugging Face browser device-login flow when needed. Run from the repository root:
+The editor targets Gemma 3 residual writers only: tied token embeddings, each decoder layer's attention output and MLP down projection, and the image-to-text projector. It accounts for the Gemma RMSNorm scales after attention and MLP writers. The script copies all original files to `artifacts/gemma-3-4b-it-abliterated/`, changes the allowlisted tensors, and writes `abliteration_report.json`. The multi-gigabyte checkpoint is local and excluded from Git.
 
-```powershell
-.\abliteration\run.ps1
-```
+The local contrastive prompt set is a small pilot. It is not the paper's full validation process, and activation separation alone does not prove that refusals were removed or that all other behavior was preserved. Gemma 3 4B was not among the Gemma variants evaluated in the cited refusal-direction paper. The detailed architecture review, sources, and limitations are in [`research/google-gemma-guardrail-analysis/README.md`](research/google-gemma-guardrail-analysis/README.md).
 
-The generated vectors are applied at inference time as a residual-stream projection. Start a chat using them with:
-
-```powershell
-.\abliteration\run.ps1 -Mode chat -Strength 1.0
-```
-
-For a one-command workflow that validates/re-extracts the vectors when they are missing or invalid and then starts the steered chat, run:
-
-```powershell
-.\abliteration\run.ps1 -Mode run -Strength 1.0
-```
-
-The selected overall strength is divided across the model's layers to reduce cumulative distortion. Chat is capped at 96 new tokens, and direction vectors are transferred to the GPU once to reduce per-token overhead. This is approximate runtime steering, not complete or behavior-preserving guardrail removal: steering can change unrelated answers, so evaluate quality at the selected strength. It does not rewrite the Gemma checkpoint or alter the existing Ollama model, and its small direction artifacts remain excluded from Git. The original Heretic runner is retained as `abliteration/run_heretic.ps1` for a machine where its PyArrow extension is permitted. Heretic is AGPL-3.0-or-later; review its license before redistribution. See the [Heretic project](https://github.com/p-e-w/heretic) and the [NeurIPS refusal-direction paper](https://papers.nips.cc/paper_files/paper/2024/file/f545448535dfde4f9786555403ab7c49-Paper-Conference.pdf) for background.
+The original Heretic runner remains as `abliteration/run_heretic.ps1` for reference. Heretic is AGPL-3.0-or-later; review its license before redistribution. See the [Heretic project](https://github.com/p-e-w/heretic) and the [NeurIPS refusal-direction paper](https://papers.nips.cc/paper_files/paper/2024/file/f545448535dfde4f9786555403ab7c49-Paper-Conference.pdf) for background.
 
 ## Fine-tuning workflow
 
