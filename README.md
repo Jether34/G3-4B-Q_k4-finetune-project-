@@ -76,6 +76,18 @@ The animated connections are a visual guide, not model weights or prompt-depende
 
 The text block count and widths are read from the installed Ollama model metadata where available. Vision dimensions use the released configuration. See Google's [Gemma 3 4B configuration](https://github.com/google/gemma_pytorch/blob/main/gemma/config.py), the [Gemma 3 decoder implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/gemma3/modular_gemma3.py), and the [gated MLP implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/gemma2/modeling_gemma2.py).
 
+## Local behavior-modification workflow
+
+The optional `abliteration/` workflow runs Heretic against the Hugging Face `google/gemma-3-4b-it` checkpoint and saves a separate LoRA adapter under `artifacts/`. It leaves the Ollama `gemma3:4b` model untouched. The run configuration uses Heretic's directional Abliteration modifier, 4-bit loading, a fixed seed, and a local optimization checkpoint so an interrupted run can be resumed.
+
+This workflow requires Python 3.12, a CUDA-capable PyTorch setup, Hugging Face access to the gated Gemma checkpoint, and acceptance of Google's Gemma terms. The included Windows launcher installs PyTorch and Heretic into an isolated environment and checks Hugging Face access before starting the run:
+
+```powershell
+.\abliteration\run.ps1
+```
+
+Accept the Gemma terms on the [Hugging Face model page](https://huggingface.co/google/gemma-3-4b-it) first. The launcher installs a small Hugging Face client, prompts for login when needed, checks model access, then installs the CUDA and Heretic environment and runs the workflow. Model files, run checkpoints, and generated adapters are intentionally excluded from Git. Heretic is AGPL-3.0-or-later; review its license before distribution. Heretic's own README documents its supported modifiers and export behavior: [p-e-w/heretic](https://github.com/p-e-w/heretic).
+
 ## Fine-tuning workflow
 
 The checked-in GGUF is an inference artifact, not the training checkpoint. The prepared Kaggle notebook loads the instruction-tuned Hugging Face checkpoint and applies 4-bit LoRA/QLoRA using Unsloth.

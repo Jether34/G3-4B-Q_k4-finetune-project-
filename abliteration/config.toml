@@ -1,0 +1,30 @@
+# Local, reproducible Heretic run for the Gemma 3 4B instruction checkpoint.
+# Requires access to google/gemma-3-4b-it on Hugging Face.
+model = "google/gemma-3-4b-it"
+dtypes = ["float16"]
+quantization = "bnb_4bit"
+device_map = "auto"
+max_memory = { "0" = "4.5GB", "cpu" = "12GB" }
+offload_outputs_to_cpu = true
+batch_size = 1
+max_response_length = 64
+n_trials = 20
+n_startup_trials = 6
+seed = 3404
+study_checkpoint_dir = "checkpoints"
+modified_model_type = "abliterated"
+export_strategy = "adapter"
+trial_index = 0
+model_action = "save"
+save_directory = "../artifacts/gemma-3-4b-it-abliterated-adapter"
+upload_reproducibility_information = "none"
+
+modifiers = [
+  { plugin = "heretic.modifiers.abliteration.Abliteration" },
+]
+
+[modifier.Abliteration]
+orthogonalize_direction = true
+row_normalization = "full"
+full_normalization_lora_rank = 3
+
