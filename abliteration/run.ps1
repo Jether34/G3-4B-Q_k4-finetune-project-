@@ -59,12 +59,12 @@ if ($Mode -eq 'extract') {
     Write-Host "Starting local chat with runtime steering strength $Strength. Original Ollama weights are unchanged."
     Invoke-Checked $script:Python @($script:Program, 'chat', '--strength', "$Strength")
 } else {
-    $directionPath = Join-Path $script:Root 'artifacts\gemma-3-4b-it-direction\refusal_directions.safetensors'
-    if (-not (Test-Path -LiteralPath $directionPath)) {
-        Write-Host 'No direction artifact found; extracting layer directions first.'
+    $artifactDir = Join-Path $script:Root 'artifacts\gemma-3-4b-it-direction'
+    $validateArgs = @($script:Program, 'validate', '--output-dir', $artifactDir)
+    & $script:Python @validateArgs
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host 'No valid direction artifact found; extracting layer directions first.'
         Invoke-Checked $script:Python @($script:Program, 'extract')
-    } else {
-        Write-Host "Using existing direction artifact: $directionPath"
     }
     Write-Host "Starting local chat with runtime steering strength $Strength. Original checkpoint and Ollama weights are unchanged."
     Invoke-Checked $script:Python @($script:Program, 'chat', '--strength', "$Strength")

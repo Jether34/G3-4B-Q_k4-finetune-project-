@@ -80,7 +80,7 @@ The text block count and widths are read from the installed Ollama model metadat
 
 Windows Application Control blocks the native PyArrow extension required by Heretic in this environment. The default `abliteration/run.ps1` workflow therefore uses a small direct Transformers implementation instead. It does not import Heretic, `datasets`, or PyArrow. It captures per-layer residual-stream directions from locally defined contrastive prompts using the gated Hugging Face `google/gemma-3-4b-it` checkpoint, then stores those vectors and metadata under `artifacts/gemma-3-4b-it-direction/`.
 
-The capture uses bitsandbytes NF4 4-bit loading and requires Python 3.12, a CUDA-capable PyTorch setup, Hugging Face access to the checkpoint, and acceptance of Google's Gemma terms. The launcher checks account access before the model download and uses the Hugging Face browser device-login flow when needed. Run from the repository root:
+The capture uses bitsandbytes NF4 4-bit loading and prefers BF16 compute when the GPU supports it, falling back to FP16 otherwise. It requires Python 3.12, a CUDA-capable PyTorch setup, Hugging Face access to the checkpoint, and acceptance of Google's Gemma terms. The launcher checks account access before the model download and uses the Hugging Face browser device-login flow when needed. Run from the repository root:
 
 ```powershell
 .\abliteration\run.ps1
@@ -92,13 +92,13 @@ The generated vectors are applied at inference time as a residual-stream project
 .\abliteration\run.ps1 -Mode chat -Strength 1.0
 ```
 
-For a one-command workflow that extracts the vectors when they are missing and then starts the steered chat, run:
+For a one-command workflow that validates/re-extracts the vectors when they are missing or invalid and then starts the steered chat, run:
 
 ```powershell
 .\abliteration\run.ps1 -Mode run -Strength 1.0
 ```
 
-This experiment changes generation only in the custom Transformers chat path. It does not rewrite the Gemma checkpoint or alter the existing Ollama model, and its small direction artifacts remain excluded from Git. The original Heretic runner is retained as `abliteration/run_heretic.ps1` for a machine where its PyArrow extension is permitted. Heretic is AGPL-3.0-or-later; review its license before redistribution. See the [Heretic project](https://github.com/p-e-w/heretic) and the [NeurIPS refusal-direction paper](https://papers.nips.cc/paper_files/paper/2024/file/f545448535dfde4f9786555403ab7c49-Paper-Conference.pdf) for background.
+The selected overall strength is divided across the model's layers to reduce cumulative distortion. This experiment changes generation only in the custom Transformers chat path. It does not rewrite the Gemma checkpoint or alter the existing Ollama model, and its small direction artifacts remain excluded from Git. The original Heretic runner is retained as `abliteration/run_heretic.ps1` for a machine where its PyArrow extension is permitted. Heretic is AGPL-3.0-or-later; review its license before redistribution. See the [Heretic project](https://github.com/p-e-w/heretic) and the [NeurIPS refusal-direction paper](https://papers.nips.cc/paper_files/paper/2024/file/f545448535dfde4f9786555403ab7c49-Paper-Conference.pdf) for background.
 
 ## Fine-tuning workflow
 

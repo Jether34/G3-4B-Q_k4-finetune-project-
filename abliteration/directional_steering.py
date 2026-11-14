@@ -50,16 +50,18 @@ def load_model():
 
     print(f"Loading {MODEL_ID} in 4-bit precision on the local GPU...", flush=True)
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+    compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    print(f"Using {compute_dtype} compute for 4-bit weights.", flush=True)
     quantization = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_compute_dtype=compute_dtype,
         bnb_4bit_use_double_quant=True,
     )
     model = AutoModelForImageTextToText.from_pretrained(
         MODEL_ID,
         quantization_config=quantization,
-        torch_dtype=torch.float16,
+        dtype=compute_dtype,
         device_map={"": 0},
         low_cpu_mem_usage=True,
     )
@@ -103,7 +105,10 @@ def capture_last_token_states(tokenizer, model, prompt: str) -> tuple[torch.Tens
         raise RuntimeError("Transformers did not return hidden states for the prompt.")
     last_index = int(inputs.get("attention_mask", torch.ones_like(inputs["input_ids"]))[0].sum()) - 1
     # Skip the embedding output; the remaining tensors align one-to-one with decoder layers.
-    return tuple(state[0, last_index].float().cpu() for state in output.hidden_states[1:])
+    states = tuple(state[0, last_index].float().cpu() for state in output.hidden_states[1:])
+    if not all(torch.isfinite(state).all().item() for state in states):
+        raise RuntimeError("The checkpoint produced non-finite activations; refusing to save invalid directions.")
+    return states
 
 
 def extract_directions(output_dir: Path) -> None:
@@ -134,6 +139,8 @@ def extract_directions(output_dir: Path) -> None:
     if torch.any(norms < 1e-8):
         raise RuntimeError("At least one layer produced a near-zero contrastive direction.")
     directions = difference / norms
+    if not torch.isfinite(directions).all().item():
+        raise RuntimeError("Non-finite refusal directions were computed; no artifact was saved.")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     direction_path = output_dir / "refusal_directions.safetensors"
@@ -149,7 +156,7 @@ def extract_directions(output_dir: Path) -> None:
         "hidden_size": int(directions.shape[-1]),
         "helpful_prompt_count": len(HELPFUL_PROMPTS),
         "refusal_prompt_count": len(REFUSAL_PROMPTS),
-        "quantization": "bitsandbytes NF4 4-bit for activation capture",
+        "quantization": "bitsandbytes NF4 4-bit; BF16 compute when GPU-supported, otherwise FP16",
         "artifact": direction_path.name,
         "note": "This is a runtime steering vector, not a modified model checkpoint.",
     }
@@ -160,6 +167,7 @@ def extract_directions(output_dir: Path) -> None:
 
 def install_steering_hooks(layers, directions: torch.Tensor, strength: float):
     handles = []
+    per_layer_strength = strength / max(len(layers), 1)
 
     def make_hook(direction):
         def hook(_module, _inputs, output):
@@ -168,7 +176,7 @@ def install_steering_hooks(layers, directions: torch.Tensor, strength: float):
             unit = direction.to(device=hidden.device, dtype=torch.float32)
             hidden32 = hidden.float()
             coefficient = torch.matmul(hidden32, unit).unsqueeze(-1)
-            modified = (hidden32 - strength * coefficient * unit).to(dtype=hidden.dtype)
+            modified = (hidden32 - per_layer_strength * coefficient * unit).to(dtype=hidden.dtype)
             return (modified, *output[1:]) if is_tuple else modified
 
         return hook
@@ -179,18 +187,46 @@ def install_steering_hooks(layers, directions: torch.Tensor, strength: float):
 
 
 @torch.inference_mode()
-def chat(tokenizer, model, directions_path: Path, strength: float) -> None:
+def load_directions(directions_path: Path) -> torch.Tensor:
     from safetensors.torch import load_file
 
     loaded = load_file(str(directions_path), device="cpu")
-    directions = torch.stack([loaded[key] for key in sorted(loaded)])
+    keys = sorted(loaded)
+    if not keys:
+        raise RuntimeError(f"Direction artifact is empty: {directions_path}")
+    directions = torch.stack([loaded[key] for key in keys])
+    if not torch.isfinite(directions).all().item():
+        raise RuntimeError(
+            f"Direction artifact contains NaN or infinite values: {directions_path}. Rerun extract."
+        )
+    if torch.any(torch.linalg.vector_norm(directions, dim=-1) < 1e-8).item():
+        raise RuntimeError(f"Direction artifact contains a zero vector: {directions_path}. Rerun extract.")
+    return directions
+
+
+def validate_direction_artifact(output_dir: Path) -> None:
+    path = output_dir / "refusal_directions.safetensors"
+    if not path.is_file():
+        raise RuntimeError(f"Direction artifact not found: {path}")
+    directions = load_directions(path)
+    print(f"Valid direction artifact: {len(directions)} finite layer vectors at {path}", flush=True)
+
+
+def chat(tokenizer, model, directions_path: Path, strength: float) -> None:
+    from transformers import LogitsProcessor, LogitsProcessorList
+
+    directions = load_directions(directions_path)
     layers = get_text_layers(model)
     if len(layers) != len(directions):
         raise RuntimeError(
             f"Direction artifact has {len(directions)} layers, but the model has {len(layers)}."
         )
     handles = install_steering_hooks(layers, directions, strength)
-    print(f"Runtime projection active (strength={strength:g}). Type /exit to quit.", flush=True)
+    print(
+        f"Runtime projection active (overall strength={strength:g}, per-layer={strength / len(layers):.4f}). "
+        "Type /exit to quit.",
+        flush=True,
+    )
 
     messages = []
     try:
@@ -208,12 +244,22 @@ def chat(tokenizer, model, directions_path: Path, strength: float) -> None:
             inputs = encode_chat(tokenizer, messages)
             inputs = {name: value.to("cuda:0") for name, value in inputs.items()}
             input_length = inputs["input_ids"].shape[-1]
+
+            class FiniteLogitsProcessor(LogitsProcessor):
+                def __call__(self, input_ids, scores):
+                    if not torch.isfinite(scores).all().item():
+                        raise RuntimeError(
+                            "Model produced non-finite token scores. Try a lower steering strength or rerun extraction."
+                        )
+                    return scores
+
             generated = model.generate(
                 **inputs,
                 max_new_tokens=256,
                 do_sample=True,
                 temperature=0.7,
                 top_p=0.9,
+                logits_processor=LogitsProcessorList([FiniteLogitsProcessor()]),
                 pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
                 eos_token_id=tokenizer.eos_token_id,
             )
@@ -227,7 +273,7 @@ def chat(tokenizer, model, directions_path: Path, strength: float) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("extract", "chat"))
+    parser.add_argument("mode", choices=("extract", "validate", "chat"))
     parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR)
     parser.add_argument("--strength", type=float, default=1.0)
     args = parser.parse_args()
@@ -237,6 +283,14 @@ def main() -> int:
     if args.mode == "extract":
         extract_directions(args.output_dir)
         return 0
+
+    if args.mode == "validate":
+        try:
+            validate_direction_artifact(args.output_dir)
+            return 0
+        except Exception as error:
+            print(f"Invalid direction artifact: {error}", file=sys.stderr, flush=True)
+            return 1
 
     direction_path = args.output_dir / "refusal_directions.safetensors"
     if not direction_path.is_file():
