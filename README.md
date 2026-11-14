@@ -76,17 +76,23 @@ The animated connections are a visual guide, not model weights or prompt-depende
 
 The text block count and widths are read from the installed Ollama model metadata where available. Vision dimensions use the released configuration. See Google's [Gemma 3 4B configuration](https://github.com/google/gemma_pytorch/blob/main/gemma/config.py), the [Gemma 3 decoder implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/gemma3/modular_gemma3.py), and the [gated MLP implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/gemma2/modeling_gemma2.py).
 
-## Local behavior-modification workflow
+## Local refusal-direction experiment
 
-The optional `abliteration/` workflow runs Heretic against the Hugging Face `google/gemma-3-4b-it` checkpoint and saves a separate LoRA adapter under `artifacts/`. It leaves the Ollama `gemma3:4b` model untouched. The run configuration uses Heretic's directional Abliteration modifier, 4-bit loading, a fixed seed, and a local optimization checkpoint so an interrupted run can be resumed.
+Windows Application Control blocks the native PyArrow extension required by Heretic in this environment. The default `abliteration/run.ps1` workflow therefore uses a small direct Transformers implementation instead. It does not import Heretic, `datasets`, or PyArrow. It captures per-layer residual-stream directions from locally defined contrastive prompts using the gated Hugging Face `google/gemma-3-4b-it` checkpoint, then stores those vectors and metadata under `artifacts/gemma-3-4b-it-direction/`.
 
-This workflow requires Python 3.12, a CUDA-capable PyTorch setup, Hugging Face access to the gated Gemma checkpoint, and acceptance of Google's Gemma terms. The included Windows launcher installs PyTorch and Heretic into an isolated environment and checks Hugging Face access before starting the run:
+The capture uses bitsandbytes NF4 4-bit loading and requires Python 3.12, a CUDA-capable PyTorch setup, Hugging Face access to the checkpoint, and acceptance of Google's Gemma terms. The launcher checks account access before the model download and uses the Hugging Face browser device-login flow when needed. Run from the repository root:
 
 ```powershell
 .\abliteration\run.ps1
 ```
 
-Accept the Gemma terms on the [Hugging Face model page](https://huggingface.co/google/gemma-3-4b-it) first. The launcher installs a small Hugging Face client, prompts for login when needed, checks model access, then installs the CUDA and Heretic environment and runs the workflow. Model files, run checkpoints, and generated adapters are intentionally excluded from Git. Heretic is AGPL-3.0-or-later; review its license before distribution. Heretic's own README documents its supported modifiers and export behavior: [p-e-w/heretic](https://github.com/p-e-w/heretic).
+The generated vectors are applied at inference time as a residual-stream projection. Start a chat using them with:
+
+```powershell
+.\abliteration\run.ps1 -Mode chat -Strength 1.0
+```
+
+This experiment does not rewrite the Gemma checkpoint or alter the existing Ollama model; only the custom Transformers chat path applies the projection. The output vectors are small local artifacts and remain excluded from Git. The original Heretic runner is retained as `abliteration/run_heretic.ps1` for a machine where its PyArrow extension is permitted. Heretic is AGPL-3.0-or-later; review its license before redistribution. See the [Heretic project](https://github.com/p-e-w/heretic) and the [NeurIPS refusal-direction paper](https://papers.nips.cc/paper_files/paper/2024/file/f545448535dfde4f9786555403ab7c49-Paper-Conference.pdf) for background.
 
 ## Fine-tuning workflow
 
