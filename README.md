@@ -92,7 +92,13 @@ The generated vectors are applied at inference time as a residual-stream project
 .\abliteration\run.ps1 -Mode chat -Strength 1.0
 ```
 
-This experiment does not rewrite the Gemma checkpoint or alter the existing Ollama model; only the custom Transformers chat path applies the projection. The output vectors are small local artifacts and remain excluded from Git. The original Heretic runner is retained as `abliteration/run_heretic.ps1` for a machine where its PyArrow extension is permitted. Heretic is AGPL-3.0-or-later; review its license before redistribution. See the [Heretic project](https://github.com/p-e-w/heretic) and the [NeurIPS refusal-direction paper](https://papers.nips.cc/paper_files/paper/2024/file/f545448535dfde4f9786555403ab7c49-Paper-Conference.pdf) for background.
+For a one-command workflow that extracts the vectors when they are missing and then starts the steered chat, run:
+
+```powershell
+.\abliteration\run.ps1 -Mode run -Strength 1.0
+```
+
+This experiment changes generation only in the custom Transformers chat path. It does not rewrite the Gemma checkpoint or alter the existing Ollama model, and its small direction artifacts remain excluded from Git. The original Heretic runner is retained as `abliteration/run_heretic.ps1` for a machine where its PyArrow extension is permitted. Heretic is AGPL-3.0-or-later; review its license before redistribution. See the [Heretic project](https://github.com/p-e-w/heretic) and the [NeurIPS refusal-direction paper](https://papers.nips.cc/paper_files/paper/2024/file/f545448535dfde4f9786555403ab7c49-Paper-Conference.pdf) for background.
 
 ## Fine-tuning workflow
 

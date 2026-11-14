@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('extract', 'chat')]
+    [ValidateSet('extract', 'chat', 'run')]
     [string]$Mode = 'extract',
     [double]$Strength = 1.0
 )
@@ -55,7 +55,17 @@ $script:Program = Join-Path $PSScriptRoot 'directional_steering.py'
 if ($Mode -eq 'extract') {
     Write-Host 'Extracting local layer directions using Transformers; Heretic and PyArrow are not used.'
     Invoke-Checked $script:Python @($script:Program, 'extract')
-} else {
+} elseif ($Mode -eq 'chat') {
     Write-Host "Starting local chat with runtime steering strength $Strength. Original Ollama weights are unchanged."
+    Invoke-Checked $script:Python @($script:Program, 'chat', '--strength', "$Strength")
+} else {
+    $directionPath = Join-Path $script:Root 'artifacts\gemma-3-4b-it-direction\refusal_directions.safetensors'
+    if (-not (Test-Path -LiteralPath $directionPath)) {
+        Write-Host 'No direction artifact found; extracting layer directions first.'
+        Invoke-Checked $script:Python @($script:Program, 'extract')
+    } else {
+        Write-Host "Using existing direction artifact: $directionPath"
+    }
+    Write-Host "Starting local chat with runtime steering strength $Strength. Original checkpoint and Ollama weights are unchanged."
     Invoke-Checked $script:Python @($script:Program, 'chat', '--strength', "$Strength")
 }
