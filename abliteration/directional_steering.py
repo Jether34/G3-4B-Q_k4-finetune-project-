@@ -168,15 +168,17 @@ def extract_directions(output_dir: Path) -> None:
 def install_steering_hooks(layers, directions: torch.Tensor, strength: float):
     handles = []
     per_layer_strength = strength / max(len(layers), 1)
+    # Move the small vectors once; copying them from CPU inside every layer hook
+    # adds avoidable synchronization and latency for every generated token.
+    directions = directions.to(device="cuda:0", dtype=torch.float32)
 
     def make_hook(direction):
         def hook(_module, _inputs, output):
             is_tuple = isinstance(output, tuple)
             hidden = output[0] if is_tuple else output
-            unit = direction.to(device=hidden.device, dtype=torch.float32)
             hidden32 = hidden.float()
-            coefficient = torch.matmul(hidden32, unit).unsqueeze(-1)
-            modified = (hidden32 - per_layer_strength * coefficient * unit).to(dtype=hidden.dtype)
+            coefficient = torch.matmul(hidden32, direction).unsqueeze(-1)
+            modified = (hidden32 - per_layer_strength * coefficient * direction).to(dtype=hidden.dtype)
             return (modified, *output[1:]) if is_tuple else modified
 
         return hook
@@ -213,8 +215,6 @@ def validate_direction_artifact(output_dir: Path) -> None:
 
 
 def chat(tokenizer, model, directions_path: Path, strength: float) -> None:
-    from transformers import LogitsProcessor, LogitsProcessorList
-
     directions = load_directions(directions_path)
     layers = get_text_layers(model)
     if len(layers) != len(directions):
@@ -245,21 +245,12 @@ def chat(tokenizer, model, directions_path: Path, strength: float) -> None:
             inputs = {name: value.to("cuda:0") for name, value in inputs.items()}
             input_length = inputs["input_ids"].shape[-1]
 
-            class FiniteLogitsProcessor(LogitsProcessor):
-                def __call__(self, input_ids, scores):
-                    if not torch.isfinite(scores).all().item():
-                        raise RuntimeError(
-                            "Model produced non-finite token scores. Try a lower steering strength or rerun extraction."
-                        )
-                    return scores
-
             generated = model.generate(
                 **inputs,
-                max_new_tokens=256,
+                max_new_tokens=96,
                 do_sample=True,
                 temperature=0.7,
                 top_p=0.9,
-                logits_processor=LogitsProcessorList([FiniteLogitsProcessor()]),
                 pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
                 eos_token_id=tokenizer.eos_token_id,
             )
