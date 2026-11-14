@@ -36,7 +36,7 @@ $hasToken = & $script:Python -c "from huggingface_hub import get_token; import s
 if ($LASTEXITCODE -ne 0) {
     Write-Host 'Sign in to Hugging Face. The Gemma model page requires access approval first:'
     Write-Host 'https://huggingface.co/google/gemma-3-4b-it'
-    Invoke-Checked $script:HF @('auth', 'login')
+    Invoke-Checked $script:HF @('auth', 'login', '--format', 'agent')
 }
 
 Write-Host "Checking access to $script:ModelId ..."
