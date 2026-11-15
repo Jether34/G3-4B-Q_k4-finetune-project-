@@ -34,6 +34,6 @@ See [`data_sources.json`](data_sources.json). The initial recommendations are of
 
 For language-model training, prioritize clean, licensed text and carefully reviewed defensive question/answer examples. Keep a time-based and source-grouped evaluation split. Don't mix generated training examples into evaluation. Don't train on exploit payloads, weaponization instructions, secrets, personal records, or unauthorized data.
 
-## Next implementation step
+## Training pilot
 
-After reviewing the audit output and selecting the task mix, create a tokenizer and a 50M configuration, then train on Kaggle. The data should be measured in tokens, not rows. A broad claim like MAE 0.001 is not an LLM quality criterion; use held-out perplexity for language modeling and task-specific precision/recall, calibration, and human review for triage.
+`train_gpt.py` creates a byte-level BPE tokenizer and trains a causal Transformer from scratch using the 50M configuration. The first Kaggle notebook run is capped at 100 steps to confirm the training path. That run is not enough to claim useful expertise. The data should be measured in tokens, not rows. A broad claim like MAE 0.001 is not an LLM quality criterion; use held-out perplexity for language modeling and task-specific precision/recall, calibration, and human review for triage.

@@ -1,0 +1,13 @@
+{
+  "id": "jethergarque/defensive-cyber-50m-pilot",
+  "title": "Defensive Cyber 50M Pilot",
+  "code_file": "cyber_50m_pretrain.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["jethergarque/defensive-cyber-50m-style-v1"],
+  "competition_sources": [],
+  "kernel_sources": []
+}

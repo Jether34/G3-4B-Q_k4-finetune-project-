@@ -1,22 +1,21 @@
-
-# Local Ollama snapshot files are large; install the model with `ollama pull gemma3:4b`.
-/ollama-manifest.json
-/sha256-*
-
-# Local training outputs, credentials, and generated files.
-/gemma_3_lora/
+# Private/source data and local prep artifacts
 /data/raw/
 /data/derived/
 /data/processed/
+/data/kaggle-upload/
 /cyber_50m/checkpoints/
 /cyber_50m/tokenizer/
 /cyber_50m/runs/
-/abliteration/.venv/
-/abliteration/checkpoints/
-/artifacts/
-*.safetensors
-*.gguf
+
+# Credentials and local environments
 .env
 .venv/
 __pycache__/
+*.py[cod]
 .ipynb_checkpoints/
+
+# Model artifacts
+*.safetensors
+*.gguf
+*.pt
+*.pth
