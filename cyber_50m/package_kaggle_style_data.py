@@ -31,7 +31,7 @@ def main() -> None:
     }
     (out / "dataset-metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     print(f"Prepared {len(source.read_text(encoding='utf-8').splitlines())} style records at {out.resolve()}")
-    print("Upload with Kaggle's --private option; do not publish this dataset.")
+    print("Kaggle CLI creates datasets privately by default; do not pass --public.")
 
 
 if __name__ == "__main__":

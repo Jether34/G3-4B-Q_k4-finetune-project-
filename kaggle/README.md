@@ -4,15 +4,15 @@ This notebook trains a small defensive GPT from scratch. It is a pipeline pilot 
 
 ## Submit the private first run
 
-1. From the repo root, prepare local data and review `data/derived/copilot_style_private.jsonl` for remaining private information.
+1. To include your style data, prepare it locally and review `data/derived/copilot_style_private.jsonl` for remaining private information.
 2. Install Kaggle's CLI in a local environment and authenticate using your Kaggle API token. Never add `kaggle.json` or a token to this repository.
 3. Get your Kaggle username from your Kaggle profile. Do not print or share the API key.
 4. Package the style data: `python cyber_50m/package_kaggle_style_data.py --owner YOUR_KAGGLE_USERNAME`.
-5. Create a private dataset: `kaggle datasets create -p data/kaggle-upload --private`.
-6. Set the dataset ID in `kaggle/kernel-metadata.json` to `YOUR_KAGGLE_USERNAME/defensive-cyber-50m-style-v1`.
+5. Create the dataset privately (Kaggle CLI defaults to private): `kaggle datasets create -p .\data\kaggle-upload`.
+6. Attach the resulting dataset to `kaggle/kernel-metadata.json` as a dataset source.
 7. Submit the notebook: `kaggle kernels push -p kaggle`.
 
-The notebook downloads CISA KEV, MITRE CWE, and NIST incident-response references in the Kaggle runtime, copies in the private style file, and trains for 100 steps on one GPU. Only the small redacted style file is uploaded as a private Kaggle dataset. Raw archives, raw conversations, processed corpora, credentials, and model outputs are excluded from Git.
+The notebook downloads CISA KEV, MITRE CWE, and NIST incident-response references in the Kaggle runtime. If the private style dataset is attached, it uses the redacted Human-only tone file; otherwise it runs on defensive reference text alone. It trains for 100 steps on one GPU. Raw archives, raw conversations, processed corpora, credentials, and model outputs are excluded from Git.
 
 ## Limits
 
