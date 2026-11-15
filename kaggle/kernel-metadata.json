@@ -1,5 +1,5 @@
 {
-  "id": "jethergarque/defensive-cyber-50m-pilot",
+  "id": "pycache/defensive-cyber-50m-pilot",
   "title": "Defensive Cyber 50M Pilot",
   "code_file": "cyber_50m_pretrain.ipynb",
   "language": "python",
@@ -7,7 +7,8 @@
   "is_private": true,
   "enable_gpu": true,
   "enable_internet": true,
-  "dataset_sources": [],
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": ["pycache/defensive-cyber-50m-pilot-data"],
   "competition_sources": [],
   "kernel_sources": []
 }

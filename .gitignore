@@ -3,6 +3,7 @@
 /data/derived/
 /data/processed/
 /data/kaggle-upload/
+/data/kaggle-output/
 /cyber_50m/checkpoints/
 /cyber_50m/tokenizer/
 /cyber_50m/runs/
