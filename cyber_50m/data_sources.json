@@ -22,6 +22,72 @@
       "use": "incident preparation, response, recovery, and risk management"
     },
     {
+      "name": "NIST SP 800-53 Rev. 5 and SP 800-53A Rev. 5",
+      "url": "https://csrc.nist.gov/Projects/risk-management/sp800-53-controls/downloads",
+      "format": "official XML and plain-text control/assessment downloads",
+      "use": "security controls, assessment, governance, identity, logging, and incident response"
+    },
+    {
+      "name": "NIST SP 800-218 Secure Software Development Framework",
+      "url": "https://csrc.nist.gov/pubs/sp/800/218/final",
+      "format": "PDF",
+      "use": "defensive secure software development practices"
+    },
+    {
+      "name": "OWASP Cheat Sheet Series",
+      "url": "https://owasp.org/projects/cheat-sheet-series",
+      "format": "Markdown from the official source repository",
+      "use": "selected defensive guidance for authentication, access control, validation, logging, headers, and secure storage",
+      "license": "CC BY-SA 4.0; attribution retained; keep derived artifacts private unless share-alike terms are reviewed"
+    },
+    {
+      "name": "Cybersecurity Question-Answer-Assertion (QAA) Dataset",
+      "url": "https://huggingface.co/datasets/Rowden/CybersecurityQAA",
+      "format": "JSON, 1,563 QA records; use only the 445 expert-reviewed entries",
+      "use": "defensive advisory task adaptation and held-out QA evaluation",
+      "license": "MIT; preserve upstream notice; source card warns most entries are not expert reviewed"
+    },
+    {
+      "name": "HolyCyber defensive cybersecurity instruction dataset",
+      "url": "https://huggingface.co/datasets/Reizxn/HolyCyber",
+      "format": "JSONL chat examples; train split only",
+      "use": "auxiliary defensive instruction data from vulnerability management, detection, response, secure configuration, cloud, identity, governance, and cryptography layers",
+      "license": "mixed per row; importer allows only recorded MITRE defensive-use terms, U.S. Government public-domain sources, or OWASP CC BY-SA 4.0; keep training artifacts private pending license review",
+      "notes": "Filter to selected defensive domains and rows with core_share >= 0.30; remove reference appendices and fenced code. Dataset authors disclose it is not reviewed row by row, so use as auxiliary training data and evaluate on separate expert-reviewed QA."
+    },
+    {
+      "name": "Cybersecurity Dataset Fenrir v2.1",
+      "url": "https://huggingface.co/datasets/AlicanKiraz0/Cybersecurity-Dataset-Fenrir-v2.1",
+      "format": "JSONL system/user/assistant triples; train split only",
+      "use": "defensive instruction adaptation, cloud and DevSecOps hardening, incident response, secure configuration, and refusal behavior",
+      "license": "Apache-2.0",
+      "notes": "Upstream card reports 99,870 rows and describes defensive alignment. Cleaned for non-empty user/assistant pairs and exact duplicates before use."
+    },
+    {
+      "name": "Threat Intelligence Dataset by reloading01",
+      "url": "https://github.com/reloading01/threat-intelligence-dataset",
+      "format": "JSONL instruction/input/output",
+      "use": "defensive incident analysis, response, threat hunting, detection operations, threat modeling, and vulnerability prioritization",
+      "license": "CC BY-NC-SA 4.0; attribution, non-commercial use, share-alike",
+      "notes": "Train split only; only explicitly allowlisted defensive categories; exclude OpenPhish-grounded rows and offensive categories. Do not redistribute the resulting model commercially without rights review."
+    },
+    {
+      "name": "Trendyol Cybersecurity Defense Instruction-Tuning Dataset v2.0",
+      "url": "https://huggingface.co/datasets/Trendyol/Trendyol-Cybersecurity-Instruction-Tuning-Dataset",
+      "format": "system/user/assistant instruction examples",
+      "use": "defensive SFT coverage across cloud security, SOC operations, incident response, and governance",
+      "license": "Apache-2.0",
+      "notes": "Train split only; normalized and exact-deduplicated against other added instruction sources."
+    },
+    {
+      "name": "Cosmopedia educational text subsets",
+      "url": "https://huggingface.co/datasets/HuggingFaceTB/cosmopedia",
+      "format": "streamed synthetic text from auto_math_text, khanacademy, and openstax configurations",
+      "use": "a small general-language sample for lexical and syntax breadth only; not cybersecurity evidence or domain knowledge",
+      "license": "Apache-2.0",
+      "notes": "Capped at 500 samples per subset to prevent general educational text from overwhelming cybersecurity data."
+    },
+    {
       "name": "NVD CVE API and data feeds",
       "url": "https://nvd.nist.gov/vuln/data-feeds",
       "format": "JSON API/feeds",

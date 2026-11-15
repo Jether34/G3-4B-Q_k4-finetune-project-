@@ -6,7 +6,7 @@ This is a separate from-scratch, decoder-only Transformer experiment. It does no
 
 Treat this as a constrained, task-specific model, not a general cybersecurity expert. Prefer a few measurable tasks and use retrieval from current authoritative sources for facts that change. Network-flow and telemetry tables belong in separate classifiers; they are not natural-language pretraining text.
 
-No single dataset or model can cover “90% of cybersecurity tasks.” Coverage depends on a defined task list and evaluation set. This project starts with the five defensive areas above and will report per-task performance rather than a single coverage claim.
+No single dataset or model can cover ?90% of cybersecurity tasks.? Coverage depends on a defined task list and evaluation set. This project starts with the five defensive areas above and will report per-task performance rather than a single coverage claim.
 
 ## Local source data
 
@@ -30,10 +30,18 @@ Tabular files are audited separately and are not converted to prose. Use only la
 
 ## Additional data sources
 
-See [`data_sources.json`](data_sources.json). The initial recommendations are official, defensive references: CISA Known Exploited Vulnerabilities and cybersecurity advisories, NIST incident-response guidance, NVD CVE records, and MITRE CWE prevention information. For network detection benchmarks, the existing CICIDS2017 data can be supplemented with the official UNSW ToN_IoT or CSE-CIC-IDS2018 releases. Respect each source's terms, citations, and size; do not commit downloaded corpora.
+See [`data_sources.json`](data_sources.json). The current corpus combines CISA KEV, MITRE CWE mitigations, NIST SP 800-61, NIST SP 800-53/53A control and assessment data, NIST SSDF, selected OWASP defensive cheat sheets, and the expert-reviewed subset of the MIT-licensed Cybersecurity QAA dataset. Data is downloaded into ignored local storage and packaged as a private Kaggle dataset. The OWASP material is CC BY-SA 4.0; preserve attribution and do not redistribute derived artifacts without reviewing share-alike requirements. CISA playbook PDF downloads returned HTTP 403 from this runtime and were not included.
+
+The QAA source contains 1,563 records, but only 445 are marked expert-reviewed. The preparation script filters that subset, excludes the attack-focused theme, reserves 20% for held-out evaluation, and trains only on the remaining items. The other rows are excluded. The held-out questions and answers are placed in the Kaggle input bundle but are not read by the training loader.
+
+The expanded Kaggle run fetches Fenrir v2.1 (Apache-2.0), Trendyol?s defensive instruction set (Apache-2.0), and the supplied threat-intelligence dataset (CC BY-NC-SA 4.0) at runtime. The CTI importer uses only its train split, applies a defensive category allowlist, excludes OpenPhish-grounded records, and protects exact held-out QAA pairs from ingestion. The CTI license restricts use to non-commercial terms and share-alike; do not redistribute the derived model without a rights review. A small capped sample from Cosmopedia?s auto_math_text, khanacademy, and openstax subsets adds general-language exposure only. See [`data_sources.json`](data_sources.json) for details.
+
+The existing CICIDS2017, escalation, and 6G telemetry tables remain separate defensive classifier datasets; they are not language-model text. For language-model pretraining, the current selected corpus is still small compared with what a 50M model typically needs. This is an iterative, task-scoped experiment rather than a claim of broad expertise.
 
 For language-model training, prioritize clean, licensed text and carefully reviewed defensive question/answer examples. Keep a time-based and source-grouped evaluation split. Don't mix generated training examples into evaluation. Don't train on exploit payloads, weaponization instructions, secrets, personal records, or unauthorized data.
 
-## Training pilot
+## Training and evaluation
 
-`train_gpt.py` creates a byte-level BPE tokenizer and trains a causal Transformer from scratch using the 50M configuration. The first Kaggle notebook run is capped at 100 steps to confirm the training path. That run is not enough to claim useful expertise. The data should be measured in tokens, not rows. A broad claim like MAE 0.001 is not an LLM quality criterion; use held-out perplexity for language modeling and task-specific precision/recall, calibration, and human review for triage.
+`train_gpt.py` creates a byte-level BPE tokenizer and trains a causal Transformer from scratch using the 50M configuration. It uses GPT-scale initialization and a deterministic full validation pass. The expanded Kaggle notebook allows up to 16,000 pretraining steps followed by up to 4,000 answer-masked supervised fine-tuning steps, both with validation-based early stopping. It reports the exact parameter count and evaluates generated answers on a separate held-out expert-reviewed QAA split before and after SFT. `evaluate_tasks.py` reports answer-token loss and a lexical assertion-coverage proxy; the proxy is not correctness, so review generated examples manually. For a text model, MAE is not an appropriate target. Report validation cross-entropy/perplexity and per-task quality measures instead.
+
+The first 100-step baseline had 48,196,608 parameters, train loss 16.91, validation loss 17.41, and 23 validation chunks. Its very high loss and tiny corpus mean it was not useful. Do not ship a checkpoint unless held-out generations are coherent, grounded, safe, and reviewed by a cybersecurity practitioner.

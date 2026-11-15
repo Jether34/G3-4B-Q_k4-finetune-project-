@@ -9,6 +9,6 @@
   "intermediate_size": 2048,
   "activation": "gelu",
   "tie_word_embeddings": true,
-  "estimated_parameters": 49428160,
-  "parameter_count_note": "Approximate; exact count depends on bias and normalization choices."
+  "estimated_parameters": 49436160,
+  "parameter_count_note": "Parameter count at the full 16,000-token vocabulary; the exact run count depends on the tokenizer vocabulary actually learned."
 }

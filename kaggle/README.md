@@ -1,6 +1,6 @@
 # Kaggle first-run pilot
 
-This notebook trains a small defensive GPT from scratch. It is a pipeline pilot on a tiny corpus, not a capable general cybersecurity assistant. Do not treat its checkpoint as deployment-ready.
+This notebook trains a 49M-parameter defensive GPT from scratch. It uses a private, attributed corpus and a separate held-out set of expert-reviewed defensive QA. It is a narrow research run, not a capable general cybersecurity assistant. Do not treat its checkpoint as deployment-ready.
 
 ## Submit the private first run
 
@@ -12,7 +12,7 @@ This notebook trains a small defensive GPT from scratch. It is a pipeline pilot 
 6. Create the dataset privately (Kaggle CLI defaults to private): `kaggle datasets create -p .\data\kaggle-upload`.
 7. Submit the notebook: `kaggle kernels push -p .\kaggle`.
 
-The notebook reads the prepared corpus and training script from a private Kaggle dataset, then trains for 100 steps on one GPU. The private dataset may also include the redacted Human-only tone file. Raw archives, raw conversations, processed corpora, credentials, and model outputs are excluded from Git.
+The notebook reads the prepared corpus, task evaluator, and training script from a private Kaggle dataset. It trains for 3,000 steps on one GPU, saves the best checkpoint and metrics to Kaggle output, then generates answers on the held-out QA split. The private dataset also includes the redacted Human-only tone file. Raw archives, raw conversations, processed corpora, credentials, and model outputs are excluded from Git.
 
 ## Limits
 

@@ -15,7 +15,17 @@ from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 
 def read_records(data_dir: Path) -> list[dict[str, str]]:
     records = []
-    for filename in ("official_defensive_text.jsonl", "incident_text.jsonl", "copilot_style_private.jsonl"):
+    for filename in (
+        "official_defensive_text.jsonl",
+        "incident_text.jsonl",
+        "cybersecurity_qa_train.jsonl",
+        "holycyber_defensive_train.jsonl",
+        "fenrir_defensive_sft.jsonl",
+        "threat_intel_defensive_sft.jsonl",
+        "trendyol_defensive_sft.jsonl",
+        "general_language_sample.jsonl",
+        "copilot_style_private.jsonl",
+    ):
         path = data_dir / filename
         if not path.exists():
             continue
@@ -99,6 +109,29 @@ class SmallGPT(nn.Module):
         self.head = nn.Linear(width, vocab, bias=False)
         if config.get("tie_word_embeddings", True):
             self.head.weight = self.token.weight
+        self._initialize(config)
+
+    def _initialize(self, config: dict):
+        """Use GPT-scale initialization rather than PyTorch's unit-scale embeddings."""
+        layers = int(config["num_layers"])
+        std = float(config.get("init_std", 0.02))
+        nn.init.normal_(self.token.weight, mean=0.0, std=std)
+        nn.init.normal_(self.position.weight, mean=0.0, std=std)
+        for module in self.layers.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.MultiheadAttention):
+                nn.init.normal_(module.in_proj_weight, mean=0.0, std=std)
+                if module.in_proj_bias is not None:
+                    nn.init.zeros_(module.in_proj_bias)
+        residual_std = std / math.sqrt(2 * layers)
+        for layer in self.layers.layers:
+            nn.init.normal_(layer.self_attn.out_proj.weight, mean=0.0, std=residual_std)
+            nn.init.normal_(layer.linear2.weight, mean=0.0, std=residual_std)
+        nn.init.ones_(self.norm.weight)
+        nn.init.zeros_(self.norm.bias)
 
     def forward(self, ids):
         _, seq = ids.shape
@@ -116,15 +149,22 @@ def draw_batch(chunks, batch_size: int, block: int, device):
 
 
 @torch.no_grad()
-def evaluate(model, chunks, batch_size, block, device, batches=20):
+def evaluate(model, chunks, batch_size, block, device, max_chunks: int):
     model.eval()
-    losses = []
-    for _ in range(batches):
-        x, y = draw_batch(chunks, batch_size, block, device)
+    # Keep validation cost stable as instruction corpora grow. The validation
+    # record order is deterministically shuffled, so this prefix is a stable sample.
+    chunks = chunks[:max_chunks]
+    total_loss = 0.0
+    total_tokens = 0
+    for start in range(0, len(chunks), batch_size):
+        batch = torch.tensor(chunks[start:start + batch_size], dtype=torch.long, device=device)
+        x, y = batch[:, :-1], batch[:, 1:]
         logits = model(x)
-        losses.append(nn.functional.cross_entropy(logits.reshape(-1, logits.size(-1)), y.reshape(-1)).item())
+        loss = nn.functional.cross_entropy(logits.float().reshape(-1, logits.size(-1)), y.reshape(-1), reduction="sum")
+        total_loss += loss.item()
+        total_tokens += y.numel()
     model.train()
-    return sum(losses) / len(losses)
+    return total_loss / max(1, total_tokens)
 
 
 def main():
@@ -136,6 +176,9 @@ def main():
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--grad-accum", type=int, default=4)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
+    parser.add_argument("--eval-interval", type=int, default=200)
+    parser.add_argument("--patience-evals", type=int, default=8)
+    parser.add_argument("--max-eval-chunks", type=int, default=2048)
     parser.add_argument("--seed", type=int, default=17)
     args = parser.parse_args()
     if not torch.cuda.is_available():
@@ -158,6 +201,8 @@ def main():
     scaler = torch.amp.GradScaler("cuda", enabled=True)
     log_path = args.out_dir / "metrics.csv"
     best_val = float("inf")
+    evaluations_without_improvement = 0
+    completed_steps = 0
     model.train()
     with log_path.open("w", newline="", encoding="utf-8") as stream:
         log = csv.writer(stream)
@@ -177,21 +222,30 @@ def main():
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             scaler.step(optimizer)
             scaler.update()
-            if step == 1 or step % 20 == 0 or step == args.steps:
-                val_loss = evaluate(model, val_chunks, args.batch_size, model.block, device)
-                log.writerow([step, total_loss, val_loss, math.exp(min(val_loss, 20))])
+            completed_steps = step
+            if step == 1 or step % args.eval_interval == 0 or step == args.steps:
+                val_loss = evaluate(model, val_chunks, args.batch_size, model.block, device, args.max_eval_chunks)
+                val_ppl = math.exp(val_loss) if val_loss < 50 else float("inf")
+                log.writerow([step, total_loss, val_loss, val_ppl])
                 stream.flush()
-                print(f"step={step} train_loss={total_loss:.4f} val_loss={val_loss:.4f} val_ppl={math.exp(min(val_loss,20)):.2f}")
+                print(f"step={step} train_loss={total_loss:.4f} val_loss={val_loss:.4f} val_ppl={val_ppl:.2f}")
                 if val_loss < best_val:
                     best_val = val_loss
+                    evaluations_without_improvement = 0
                     torch.save({"model": model.state_dict(), "config": config, "vocab_size": tokenizer.get_vocab_size()}, args.out_dir / "best_checkpoint.pt")
+                else:
+                    evaluations_without_improvement += 1
+                    if args.patience_evals > 0 and evaluations_without_improvement >= args.patience_evals:
+                        print(f"early stopping after {evaluations_without_improvement} evaluations without validation improvement")
+                        break
 
     summary = {
         "parameters": param_count,
         "tokenizer_vocab_size": tokenizer.get_vocab_size(),
         "train_chunks": len(train_chunks),
         "validation_chunks": len(val_chunks),
-        "steps": args.steps,
+        "validation_chunks_evaluated": min(len(val_chunks), args.max_eval_chunks),
+        "steps": completed_steps,
         "best_validation_loss": best_val,
         "scope": "defensive cybersecurity pilot; not a capability or safety certification",
     }
