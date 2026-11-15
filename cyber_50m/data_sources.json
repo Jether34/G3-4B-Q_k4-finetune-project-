@@ -1,0 +1,53 @@
+{
+  "scope": "defensive cybersecurity; sources are references or defensive detection data, not exploit-training material",
+  "text_sources": [
+    {
+      "name": "CISA Known Exploited Vulnerabilities Catalog",
+      "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+      "format": "JSON/CSV download",
+      "use": "prioritization examples with mitigation/deadline fields",
+      "notes": "Prefer catalog metadata and remediation-oriented context; preserve attribution and check current terms."
+    },
+    {
+      "name": "CISA Cybersecurity Advisories",
+      "url": "https://www.cisa.gov/news-events/cybersecurity-advisories",
+      "format": "web pages and documents",
+      "use": "defensive detection, impact, mitigation, and response summaries",
+      "notes": "Curate mitigation and response sections; review third-party content and reuse terms."
+    },
+    {
+      "name": "NIST SP 800-61 Rev. 3",
+      "url": "https://csrc.nist.gov/pubs/sp/800/61/r3/final",
+      "format": "PDF",
+      "use": "incident preparation, response, recovery, and risk management"
+    },
+    {
+      "name": "NVD CVE API and data feeds",
+      "url": "https://nvd.nist.gov/vuln/data-feeds",
+      "format": "JSON API/feeds",
+      "use": "vulnerability description, severity, CWE mapping, and remediation references",
+      "notes": "Avoid treating severity alone as a complete risk score; join with asset context and KEV status."
+    },
+    {
+      "name": "MITRE CWE downloads",
+      "url": "https://cwe.mitre.org/data/downloads.html",
+      "format": "XML/CSV",
+      "use": "weakness classification and prevention guidance"
+    }
+  ],
+  "tabular_defense_sources": [
+    {
+      "name": "UNSW ToN_IoT",
+      "url": "https://research.unsw.edu.au/projects/toniot-datasets",
+      "use": "labeled IoT/IIoT telemetry, OS, and network anomaly detection",
+      "notes": "Use for a separate defensive detection model; inspect terms, labels, and provenance first."
+    },
+    {
+      "name": "CSE-CIC-IDS2018",
+      "url": "https://www.unb.ca/cic/datasets/ids-2018.html",
+      "use": "network-flow and event-log intrusion-detection evaluation",
+      "notes": "Large; download only if needed. The source page requires citation on use or redistribution."
+    }
+  ],
+  "not_a_claim": "These sources do not cover 90% of cybersecurity work. Define task coverage and evaluate each task separately."
+}

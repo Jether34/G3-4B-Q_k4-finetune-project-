@@ -5,6 +5,12 @@
 
 # Local training outputs, credentials, and generated files.
 /gemma_3_lora/
+/data/raw/
+/data/derived/
+/data/processed/
+/cyber_50m/checkpoints/
+/cyber_50m/tokenizer/
+/cyber_50m/runs/
 /abliteration/.venv/
 /abliteration/checkpoints/
 /artifacts/

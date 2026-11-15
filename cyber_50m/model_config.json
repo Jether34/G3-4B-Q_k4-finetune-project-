@@ -1,0 +1,14 @@
+{
+  "model_type": "decoder_only_transformer",
+  "training_mode": "from_scratch",
+  "vocab_size": 32000,
+  "max_sequence_length": 512,
+  "hidden_size": 512,
+  "num_layers": 10,
+  "num_attention_heads": 8,
+  "intermediate_size": 2048,
+  "activation": "gelu",
+  "tie_word_embeddings": true,
+  "estimated_parameters": 48200000,
+  "parameter_count_note": "Approximate; exact count depends on bias and normalization choices."
+}
