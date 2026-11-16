@@ -14,15 +14,19 @@ On a separate 89-question expert-reviewed QA holdout, answer-token loss was 5.36
 
 Round 2 adds 3,553 auxiliary instruction examples from selected defensive layers of HolyCyber. The importer uses only train-split rows, requires a recorded defensive-use/public-domain/CC BY-SA license, requires `core_share >= 0.30`, removes reference appendices and fenced code, and excludes attack-knowledge, pentest, malware-analysis, and threat-intelligence layers. The dataset is third-party generated and is not reviewed row by row, so it is auxiliary; the separate expert-reviewed QAA holdout remains the main task evaluation.
 
-Round 2 uses an 8,000-step cap, full validation every 200 steps, and early stopping after eight evaluations without improvement. Record results and any deviations below after Kaggle completes.
+Round 2 used an 8,000-step cap with validation every 200 steps and early stopping after eight non-improving evaluations. Its 79-question held-out generation quality remained weak.
 
 ## Round 3: expanded sources and SFT
 
-Kaggle kernel version 6 was submitted with a 16,000-step pretraining cap followed by up to 4,000 answer-masked SFT steps. The source audit in the notebook retained 99,837 Fenrir v2.1 rows and 4,691 defensive CTI rows after category and duplicate filtering. It sampled 500 rows each from Cosmopedia `auto_math_text`, `khanacademy`, and `openstax`. The Trendyol dataset added zero unique rows because all 53,201 normalized prompt-answer pairs duplicated Fenrir examples. The CTI loader excluded 6,306 non-allowlisted categories, 45 OpenPhish-grounded rows, and protected all 79 held-out QAA pairs from exact inclusion.
+Kaggle version 6 used the expanded data importer and a single long notebook cell. Its source audit retained 99,837 Fenrir rows and 4,691 defensive CTI rows; Trendyol contributed zero unique examples because its 53,201 normalized pairs duplicated Fenrir. The CTI filter excluded 6,306 non-allowlisted rows and 45 OpenPhish-grounded rows. The optional Cosmopedia download was removed in version 7 after OpenStax descriptor retries.
 
-The available Round 3 log ended after the source audit at about 110 seconds and contained no optimizer-step lines. Kaggle later returned `CANCEL_ACKNOWLEDGED`; no Round 3 result artifacts were published and no failure message was supplied. The log includes OpenStax file-descriptor retries, but the source summary recorded the requested 500 OpenStax samples, so that error alone does not explain the long runtime. The notebook's single long cell and buffered child-process output made progress invisible. The CTI data is CC BY-NC-SA 4.0, which limits use to non-commercial terms and share-alike; keep any checkpoint private unless rights are reviewed.
+Version 7 completed with 49,436,160 parameters. Pretraining ran 30,000 updates over 153,087 chunks, saw 1.568 corpus passes, and reached best validation loss 1.7893 (perplexity 5.99). SFT stopped at 12,500 updates after six validation checks without improvement; its best answer-validation loss was 2.2899 at step 9,500. SFT saw about 0.457 passes through its answer chunks.
 
-The follow-up revision removes the optional Cosmopedia download, separates stages into distinct notebook cells, starts child Python in unbuffered mode, prints progress every 50 optimizer updates, derives update counts from actual corpus chunks, targets up to two shuffled passes per phase, caps each phase at 30,000 updates, and validates every 500 updates on at most 512 chunks. These are observability and scheduling corrections, not evidence of improved model quality. Results remain pending.
+On the same 79-question holdout, answer-token loss moved from 3.8288 before SFT to 3.6890 after SFT; perplexity moved from 46.01 to 40.00; lexical assertion coverage moved from 0.772 to 0.873. These metrics show a modest improvement, but the lexical proxy is not correctness. Spot-checked outputs remained repetitive and generic. This does not establish useful cybersecurity task performance.
+
+Version 8 was submitted before version 7 stopped, so both sessions ran concurrently. Version 7 completed; version 8 later returned `CANCEL_ACKNOWLEDGED` without output artifacts. This duplicate run was unnecessary GPU use.
+
+See [`training_run_audit.md`](training_run_audit.md) for the log diagnosis and detailed run counts. The complete local metrics and generated-answer CSV are under the ignored `data/kaggle-output/version-7/` directory. The CTI license is CC BY-NC-SA 4.0; keep model artifacts private pending a source-by-source rights review.
 
 ## Deployment decision
 
