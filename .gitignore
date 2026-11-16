@@ -20,3 +20,6 @@ __pycache__/
 *.gguf
 *.pt
 *.pth
+
+# Locally rendered paper previews
+/research/*.png
