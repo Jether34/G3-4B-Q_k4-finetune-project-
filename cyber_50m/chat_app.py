@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import streamlit as st
@@ -12,6 +13,10 @@ from train_gpt import SmallGPT
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "cyber_135m"))
+from guardrail_policy import effective_guardrails, unsafe_guardrail_reason
+
+
 DEFAULT_CHECKPOINT = ROOT / "data/kaggle-output/version-7/cyber_50m_sft/best_sft_checkpoint.pt"
 DEFAULT_TOKENIZER = ROOT / "data/kaggle-output/version-7/cyber_50m_pretrain/tokenizer.json"
 DEFAULT_HF_CHECKPOINT = ROOT / "data/kaggle-output/135m/best_model"
@@ -115,10 +120,17 @@ with st.sidebar:
     top_p = st.slider("Top-p", 0.5, 1.0, 0.9, 0.05)
     repetition_penalty = st.slider("Repetition penalty", 1.0, 1.5, 1.1, 0.05)
     default_guardrails = GUARDRAILS_PATH.read_text(encoding="utf-8") if GUARDRAILS_PATH.exists() else "Be helpful, accurate, and defensive."
-    guardrails = st.text_area("Your guardrails", value=default_guardrails, height=210, key="guardrails_editor")
+    guardrails_text = st.text_area("Your guardrails", value=default_guardrails, height=210, key="guardrails_editor")
+    guardrails, policy_warning = effective_guardrails(guardrails_text)
+    if policy_warning:
+        st.error("These guardrails include unsafe attack or unauthorized-action instructions. The model is using the built-in defensive policy instead. Edit and save safe guardrails to use your preferences.")
     if st.button("Save guardrails"):
-        GUARDRAILS_PATH.write_text(guardrails.strip() + "\n", encoding="utf-8")
-        st.success("Saved to cyber_50m/guardrails.md")
+        reason = unsafe_guardrail_reason(guardrails_text)
+        if reason:
+            st.error("Cannot save guardrails that direct the model to automate attacks, run commands autonomously, or enable unauthorized access or harm.")
+        else:
+            GUARDRAILS_PATH.write_text(guardrails_text.strip() + "\n", encoding="utf-8")
+            st.success("Saved to cyber_135m/guardrails.md")
     st.caption("Model answers can be inaccurate. Verify important security decisions against trusted sources.")
 
 if "messages" not in st.session_state:

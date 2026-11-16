@@ -27,7 +27,7 @@ def main() -> None:
 
     for filename in ("cybersecurity_qa_train.jsonl", "cybersecurity_qa_eval.jsonl", "holycyber_defensive_train.jsonl", "official_defensive_text.jsonl"):
         copy_if_exists(Path("data/derived") / filename, out / "data" / filename)
-    for filename in ("prepare_sft.py", "train_sft.py", "evaluate_samples.py", "evaluate_holdout.py", "guardrails.md", "style_profile.md", "model_card.md", "sources_and_licenses.md", "requirements.txt"):
+    for filename in ("prepare_sft.py", "train_sft.py", "evaluate_samples.py", "evaluate_holdout.py", "guardrail_policy.py", "guardrails.md", "style_profile.md", "model_card.md", "sources_and_licenses.md", "requirements.txt"):
         copy_if_exists(Path("cyber_135m") / filename, out / "cyber_135m" / filename)
 
     readme = (
