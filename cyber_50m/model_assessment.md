@@ -26,4 +26,6 @@ The follow-up revision removes the optional Cosmopedia download, separates stage
 
 ## Deployment decision
 
+Version 7 then remained silent inside pretraining setup for over six minutes. Inspection found another missing progress layer: reading the full instruction corpus, fitting the BPE tokenizer, and chunking records ran without messages before the first optimizer step. This is a defect in the submitted training code's observability, not a demonstrated Kaggle error. The next revision logs each setup stage and reports record/token counts during tokenizer input and chunking. No version 7 training steps or quality results can be claimed from the available log.
+
 Do not deploy or describe the current checkpoint as a cybersecurity expert. A language-model MAE target is not applicable; report cross-entropy/perplexity, task-specific metrics, human review, and safety evaluation instead. The 50M parameter budget and current corpus cannot support a claim of broad coverage across 90% of cybersecurity tasks.

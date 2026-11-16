@@ -31,3 +31,7 @@ The long run was made worse by an arbitrary 20,000-update budget (16,000 pretrai
 5. Reduce validation frequency to every 500 updates and use a fixed 512-chunk validation sample.
 
 These changes should make the next run observable and finite. They do not promise broad cybersecurity coverage or a production-ready model. The new run's step budget, data passes, losses, wall time, and held-out generations must be reported from its actual artifacts.
+
+## Follow-up: version 7
+
+Version 7 completed source preparation in about 90 seconds. At 90.6 seconds the notebook entered pretraining; the log had not reached the first optimizer update after more than six minutes. I initially missed that `train_gpt.py` did not print while reading the full records, fitting the tokenizer, and encoding records into chunks. `-u` cannot make silent code report progress. This is an implementation and observability gap in my follow-up, not evidence of a Kaggle platform fault. The next revision emits stage markers, tokenizer-input counts, and chunking counts before the first optimizer update. Version 7's actual failure point is unknown until Kaggle returns a terminal status or artifacts.

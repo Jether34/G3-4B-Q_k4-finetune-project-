@@ -54,10 +54,10 @@ def read_examples(data_dir: Path) -> list[dict[str, str]]:
     return list(unique.values())
 
 
-def make_chunks(examples, tokenizer: Tokenizer, block: int):
+def make_chunks(examples, tokenizer: Tokenizer, block: int, label: str):
     eos = tokenizer.token_to_id("[EOS]")
     chunks: list[tuple[list[int], int]] = []
-    for row in examples:
+    for example_index, row in enumerate(examples, start=1):
         prefix = tokenizer.encode(row["prompt"]).ids
         answer = tokenizer.encode(" " + row["answer"]).ids + [eos]
         if not prefix or not answer:
@@ -78,6 +78,8 @@ def make_chunks(examples, tokenizer: Tokenizer, block: int):
             if len(sequence) >= 2:
                 chunks.append((sequence, len(context)))
             offset += len(target)
+        if example_index == 1 or example_index % 5000 == 0 or example_index == len(examples):
+            print(f"{label}_chunking_progress examples={example_index}/{len(examples)} chunks={len(chunks)}", flush=True)
     if len(chunks) < 8:
         raise RuntimeError("The QA corpus produced too few answer chunks")
     return chunks
@@ -166,17 +168,20 @@ def main() -> None:
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     device = torch.device("cuda")
+    print("stage=load_pretrain_checkpoint_start", flush=True)
     artifact = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
     config = artifact["config"]
     tokenizer = Tokenizer.from_file(str(args.tokenizer))
+    print("stage=load_sft_examples_start", flush=True)
     examples = read_examples(args.data_dir)
+    print(f"stage=load_sft_examples_done examples={len(examples)}", flush=True)
     rng = random.Random(args.seed)
     rng.shuffle(examples)
     val_count = max(1, round(len(examples) * 0.1))
     val_examples, train_examples = examples[:val_count], examples[val_count:]
     block = int(config["max_sequence_length"])
-    train_chunks = make_chunks(train_examples, tokenizer, block)
-    val_chunks = make_chunks(val_examples, tokenizer, block)
+    train_chunks = make_chunks(train_examples, tokenizer, block, "sft_train")
+    val_chunks = make_chunks(val_examples, tokenizer, block, "sft_validation")
     if len(train_chunks) < args.batch_size * args.grad_accum:
         raise RuntimeError("SFT corpus is too small for one effective batch; refusing to silently oversample it")
     pad_id = tokenizer.token_to_id("[PAD]")

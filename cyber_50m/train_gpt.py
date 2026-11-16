@@ -63,7 +63,15 @@ def make_tokenizer(texts: list[str], vocab_size: int, output: Path) -> Tokenizer
         initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),
         show_progress=True,
     )
-    tokenizer.train_from_iterator(iter(texts), trainer=trainer)
+    def progress_texts():
+        for index, text in enumerate(texts, start=1):
+            if index == 1 or index % 5000 == 0 or index == len(texts):
+                print(f"tokenizer_input_progress records={index}/{len(texts)}", flush=True)
+            yield text
+
+    print(f"tokenizer_training_start records={len(texts)} vocab_target={vocab_size}", flush=True)
+    tokenizer.train_from_iterator(progress_texts(), trainer=trainer, length=len(texts))
+    print(f"tokenizer_training_complete vocab={tokenizer.get_vocab_size()}", flush=True)
     tokenizer.save(str(output))
     return tokenizer
 
@@ -77,12 +85,14 @@ def split_records(records: list[dict[str, str]], seed: int):
     return defensive[:split] + style, defensive[split:] or defensive[-1:]
 
 
-def chunk_records(records: list[dict[str, str]], tokenizer: Tokenizer, block: int):
+def chunk_records(records: list[dict[str, str]], tokenizer: Tokenizer, block: int, label: str):
     eos = tokenizer.token_to_id("[EOS]")
     encoded: list[int] = []
-    for record in records:
+    for index, record in enumerate(records, start=1):
         encoded.extend(tokenizer.encode(record["text"]).ids)
         encoded.append(eos)
+        if index == 1 or index % 5000 == 0 or index == len(records):
+            print(f"{label}_chunking_progress records={index}/{len(records)} tokens={len(encoded)}", flush=True)
     chunks = [encoded[i:i + block + 1] for i in range(0, len(encoded) - block, block)]
     if len(chunks) < 8:
         raise RuntimeError("Corpus is too small to produce eight training chunks at this context length")
@@ -222,12 +232,15 @@ def main():
     config = json.loads(args.config.read_text(encoding="utf-8"))
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
+    print("stage=load_records_start", flush=True)
     records = read_records(args.data_dir)
+    print(f"stage=load_records_done records={len(records)}", flush=True)
     train_records, val_records = split_records(records, args.seed)
+    print(f"stage=split_done train_records={len(train_records)} validation_records={len(val_records)}", flush=True)
     tokenizer_path = args.out_dir / "tokenizer.json"
     tokenizer = make_tokenizer([r["text"] for r in train_records], int(config["vocab_size"]), tokenizer_path)
-    train_chunks = chunk_records(train_records, tokenizer, int(config["max_sequence_length"]))
-    val_chunks = chunk_records(val_records, tokenizer, int(config["max_sequence_length"]))
+    train_chunks = chunk_records(train_records, tokenizer, int(config["max_sequence_length"]), "train")
+    val_chunks = chunk_records(val_records, tokenizer, int(config["max_sequence_length"]), "validation")
     actual_vocab_size = tokenizer.get_vocab_size()
     if actual_vocab_size < int(config["vocab_size"]) - 128:
         raise RuntimeError(f"Tokenizer vocabulary is only {actual_vocab_size}; refusing to train a materially undersized model")
