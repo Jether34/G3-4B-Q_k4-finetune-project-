@@ -1,0 +1,14 @@
+{
+  "id": "jethergarque/defensive-cyber-135m-adaptation",
+  "title": "Defensive Cyber 135M Adaptation",
+  "code_file": "cyber_135m_adaptation.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": ["jethergarque/defensive-cyber-135m-data"],
+  "competition_sources": [],
+  "kernel_sources": []
+}

@@ -1,5 +1,16 @@
 # Defensive Cyber 50M Model
 
+## Local chat interface
+
+Install the chat dependencies and start the local browser app from the repository root:
+
+```powershell
+python -m pip install -r cyber_50m/requirements-chat.txt
+python -m streamlit run cyber_50m/chat_app.py
+```
+
+Streamlit opens the chat in your browser (usually `http://localhost:8501`). The app can load the version 7 50M checkpoint or a Hugging Face `save_pretrained` folder from the 135M adaptation. Set the path in the sidebar; the 135M folder defaults to `data/kaggle-output/135m/best_model`. The sidebar also lets you edit and save `cyber_135m/guardrails.md`; the same file is added to the next SFT prompts. Prompt guardrails are not a guarantee, and answers must be verified.
+
 This is a separate from-scratch, decoder-only Transformer experiment. It does not change the existing Gemma 3 4B QLoRA workflow. The intended scope is defensive support: security-alert triage, incident-response guidance, vulnerability prioritization, secure configuration, and security awareness.
 
 ## What 50M parameters can do
