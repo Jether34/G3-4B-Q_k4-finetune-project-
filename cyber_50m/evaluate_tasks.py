@@ -48,7 +48,7 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     results = []
 
-    for row in rows:
+    for example_index, row in enumerate(rows, start=1):
         prompt = f"Question: {row['question']}\nAnswer:"
         prompt_ids = tokenizer.encode(prompt).ids
         reference_ids = tokenizer.encode(" " + row["answer"]).ids
@@ -89,6 +89,8 @@ def main() -> None:
             "assertions_covered": covered,
             "assertions_total": len(assertions),
         })
+        if example_index == 1 or example_index % 10 == 0 or example_index == len(rows):
+            print(f"task_eval_progress examples={example_index}/{len(rows)}", flush=True)
 
     with (args.output_dir / "task_generations.csv").open("w", newline="", encoding="utf-8-sig") as stream:
         writer = csv.DictWriter(stream, fieldnames=list(results[0]) if results else [])

@@ -6,6 +6,7 @@ import csv
 import json
 import math
 import random
+import time
 from pathlib import Path
 
 import torch
@@ -96,6 +97,33 @@ def collate(chunks, indices, pad_id: int, device):
     return x, y
 
 
+class ChunkSampler:
+    """Visit answer chunks in shuffled, non-replacement passes."""
+    def __init__(self, size: int, seed: int):
+        self.size = size
+        self.rng = random.Random(seed)
+        self.order = list(range(size))
+        self.rng.shuffle(self.order)
+        self.cursor = 0
+        self.samples_seen = 0
+
+    def next_indices(self, count: int) -> list[int]:
+        result = []
+        while len(result) < count:
+            if self.cursor >= self.size:
+                self.rng.shuffle(self.order)
+                self.cursor = 0
+            take = min(count - len(result), self.size - self.cursor)
+            result.extend(self.order[self.cursor:self.cursor + take])
+            self.cursor += take
+            self.samples_seen += take
+        return result
+
+    @property
+    def epochs_seen(self) -> float:
+        return self.samples_seen / max(1, self.size)
+
+
 @torch.no_grad()
 def evaluate(model, chunks, batch_size: int, pad_id: int, device, max_chunks: int) -> float:
     model.eval()
@@ -119,15 +147,20 @@ def main() -> None:
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--tokenizer", type=Path, required=True)
     parser.add_argument("--out-dir", type=Path, required=True)
-    parser.add_argument("--steps", type=int, default=3000)
+    parser.add_argument("--steps", type=int, default=None, help="Optional explicit override; otherwise derive from --epochs")
+    parser.add_argument("--epochs", type=float, default=1.0)
+    parser.add_argument("--max-steps", type=int, default=30000)
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--grad-accum", type=int, default=4)
     parser.add_argument("--learning-rate", type=float, default=5e-5)
     parser.add_argument("--eval-interval", type=int, default=100)
     parser.add_argument("--patience-evals", type=int, default=8)
     parser.add_argument("--max-eval-chunks", type=int, default=1024)
+    parser.add_argument("--log-interval", type=int, default=50)
     parser.add_argument("--seed", type=int, default=29)
     args = parser.parse_args()
+    if args.epochs <= 0 or args.max_steps < 1 or args.eval_interval < 1 or args.log_interval < 1:
+        parser.error("epochs, max-steps, eval-interval, and log-interval must be positive")
     if not torch.cuda.is_available():
         raise RuntimeError("This SFT pass requires a Kaggle GPU")
     random.seed(args.seed)
@@ -144,6 +177,8 @@ def main() -> None:
     block = int(config["max_sequence_length"])
     train_chunks = make_chunks(train_examples, tokenizer, block)
     val_chunks = make_chunks(val_examples, tokenizer, block)
+    if len(train_chunks) < args.batch_size * args.grad_accum:
+        raise RuntimeError("SFT corpus is too small for one effective batch; refusing to silently oversample it")
     pad_id = tokenizer.token_to_id("[PAD]")
     if pad_id is None:
         raise RuntimeError("Tokenizer has no PAD token")
@@ -156,15 +191,26 @@ def main() -> None:
     best_val = float("inf")
     no_improvement = 0
     completed_steps = 0
+    sampler = ChunkSampler(len(train_chunks), args.seed)
+    steps_per_epoch = math.ceil(len(train_chunks) / (args.batch_size * args.grad_accum))
+    requested_steps = math.ceil(steps_per_epoch * args.epochs) if args.steps is None else args.steps
+    total_steps = min(requested_steps, args.max_steps)
+    print(
+        f"sft_ready examples={len(examples)} train_examples={len(train_examples)} "
+        f"train_chunks={len(train_chunks)} validation_chunks={len(val_chunks)} "
+        f"steps_per_epoch={steps_per_epoch} epochs_requested={args.epochs:.2f} "
+        f"steps={total_steps} effective_batch={args.batch_size * args.grad_accum}", flush=True,
+    )
+    started_at = time.monotonic()
     model.train()
     with log_path.open("w", newline="", encoding="utf-8") as stream:
         log = csv.writer(stream)
         log.writerow(["step", "train_answer_loss", "val_answer_loss", "val_answer_perplexity"])
-        for step in range(1, args.steps + 1):
+        for step in range(1, total_steps + 1):
             optimizer.zero_grad(set_to_none=True)
             running_loss = 0.0
             for _ in range(args.grad_accum):
-                picks = random.choices(range(len(train_chunks)), k=args.batch_size)
+                picks = sampler.next_indices(args.batch_size)
                 x, y = collate(train_chunks, picks, pad_id, device)
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
                     logits = model(x)
@@ -178,12 +224,21 @@ def main() -> None:
             scaler.step(optimizer)
             scaler.update()
             completed_steps = step
-            if step == 1 or step % args.eval_interval == 0 or step == args.steps:
+            if step % args.log_interval == 0:
+                elapsed = time.monotonic() - started_at
+                rate = step / max(elapsed, 1e-6)
+                remaining = max(0, total_steps - step) / max(rate, 1e-6)
+                print(
+                    f"sft_progress step={step}/{total_steps} data_epochs={sampler.epochs_seen:.3f} "
+                    f"train_answer_loss={running_loss:.4f} steps_per_sec={rate:.3f} eta_min={remaining / 60:.1f}",
+                    flush=True,
+                )
+            if step == 1 or step % args.eval_interval == 0 or step == total_steps:
                 val_loss = evaluate(model, val_chunks, args.batch_size, pad_id, device, args.max_eval_chunks)
                 val_ppl = math.exp(val_loss) if val_loss < 50 else float("inf")
                 log.writerow([step, running_loss, val_loss, val_ppl])
                 stream.flush()
-                print(f"sft_step={step} train_answer_loss={running_loss:.4f} val_answer_loss={val_loss:.4f} val_answer_ppl={val_ppl:.2f}")
+                print(f"sft_eval step={step} train_answer_loss={running_loss:.4f} val_answer_loss={val_loss:.4f} val_answer_ppl={val_ppl:.2f}", flush=True)
                 if val_loss < best_val:
                     best_val = val_loss
                     no_improvement = 0
@@ -192,13 +247,16 @@ def main() -> None:
                 else:
                     no_improvement += 1
                     if args.patience_evals > 0 and no_improvement >= args.patience_evals:
-                        print(f"SFT early stopping after {no_improvement} evaluations without improvement")
+                        print(f"sft_early_stop step={step} no_improvement_evals={no_improvement}", flush=True)
                         break
     summary = {
         "examples": len(examples), "train_examples": len(train_examples), "validation_examples": len(val_examples),
         "train_answer_chunks": len(train_chunks), "validation_answer_chunks": len(val_chunks),
         "validation_answer_chunks_evaluated": min(len(val_chunks), args.max_eval_chunks),
         "steps": completed_steps, "best_validation_answer_loss": best_val,
+        "steps_per_epoch": steps_per_epoch, "data_epochs_seen": sampler.epochs_seen,
+        "training_chunks_seen": sampler.samples_seen,
+        "maximum_steps_configured": args.max_steps,
         "scope": "defensive cybersecurity task adaptation; evaluate on separate expert-reviewed QA",
     }
     (args.out_dir / "sft_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")

@@ -6,6 +6,7 @@ import csv
 import json
 import math
 import random
+import time
 from pathlib import Path
 
 import torch
@@ -142,8 +143,35 @@ class SmallGPT(nn.Module):
         return self.head(self.norm(x))
 
 
-def draw_batch(chunks, batch_size: int, block: int, device):
-    picks = random.choices(chunks, k=batch_size)
+class ChunkSampler:
+    """Visit corpus chunks in shuffled, non-replacement passes."""
+    def __init__(self, size: int, seed: int):
+        self.size = size
+        self.rng = random.Random(seed)
+        self.order = list(range(size))
+        self.rng.shuffle(self.order)
+        self.cursor = 0
+        self.samples_seen = 0
+
+    def next_indices(self, count: int) -> list[int]:
+        result = []
+        while len(result) < count:
+            if self.cursor >= self.size:
+                self.rng.shuffle(self.order)
+                self.cursor = 0
+            take = min(count - len(result), self.size - self.cursor)
+            result.extend(self.order[self.cursor:self.cursor + take])
+            self.cursor += take
+            self.samples_seen += take
+        return result
+
+    @property
+    def epochs_seen(self) -> float:
+        return self.samples_seen / max(1, self.size)
+
+
+def draw_batch(chunks, batch_size: int, block: int, device, sampler: ChunkSampler):
+    picks = [chunks[index] for index in sampler.next_indices(batch_size)]
     batch = torch.tensor(picks, dtype=torch.long, device=device)
     return batch[:, :-1], batch[:, 1:]
 
@@ -172,15 +200,20 @@ def main():
     parser.add_argument("--data-dir", type=Path, default=Path("data/derived"))
     parser.add_argument("--config", type=Path, default=Path("cyber_50m/model_config.json"))
     parser.add_argument("--out-dir", type=Path, default=Path("cyber_50m/runs/first_pilot"))
-    parser.add_argument("--steps", type=int, default=120)
+    parser.add_argument("--steps", type=int, default=None, help="Optional explicit override; otherwise derive from --epochs")
+    parser.add_argument("--epochs", type=float, default=1.0)
+    parser.add_argument("--max-steps", type=int, default=30000)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--grad-accum", type=int, default=4)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
     parser.add_argument("--eval-interval", type=int, default=200)
     parser.add_argument("--patience-evals", type=int, default=8)
     parser.add_argument("--max-eval-chunks", type=int, default=2048)
+    parser.add_argument("--log-interval", type=int, default=50)
     parser.add_argument("--seed", type=int, default=17)
     args = parser.parse_args()
+    if args.epochs <= 0 or args.max_steps < 1 or args.eval_interval < 1 or args.log_interval < 1:
+        parser.error("epochs, max-steps, eval-interval, and log-interval must be positive")
     if not torch.cuda.is_available():
         raise RuntimeError("This pilot is intended to run on a Kaggle GPU accelerator")
     torch.manual_seed(args.seed)
@@ -195,6 +228,9 @@ def main():
     tokenizer = make_tokenizer([r["text"] for r in train_records], int(config["vocab_size"]), tokenizer_path)
     train_chunks = chunk_records(train_records, tokenizer, int(config["max_sequence_length"]))
     val_chunks = chunk_records(val_records, tokenizer, int(config["max_sequence_length"]))
+    actual_vocab_size = tokenizer.get_vocab_size()
+    if actual_vocab_size < int(config["vocab_size"]) - 128:
+        raise RuntimeError(f"Tokenizer vocabulary is only {actual_vocab_size}; refusing to train a materially undersized model")
     model = SmallGPT(tokenizer.get_vocab_size(), config).to(device)
     param_count = sum(p.numel() for p in model.parameters())
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, betas=(0.9, 0.95), weight_decay=0.1)
@@ -203,15 +239,27 @@ def main():
     best_val = float("inf")
     evaluations_without_improvement = 0
     completed_steps = 0
+    sampler = ChunkSampler(len(train_chunks), args.seed)
+    steps_per_epoch = math.ceil(len(train_chunks) / (args.batch_size * args.grad_accum))
+    requested_steps = math.ceil(steps_per_epoch * args.epochs) if args.steps is None else args.steps
+    total_steps = min(requested_steps, args.max_steps)
+    print(
+        f"pretrain_ready records={len(train_records)} train_chunks={len(train_chunks)} "
+        f"validation_chunks={len(val_chunks)} steps_per_epoch={steps_per_epoch} "
+        f"epochs_requested={args.epochs:.2f} steps={total_steps} "
+        f"effective_batch={args.batch_size * args.grad_accum} vocab={actual_vocab_size} "
+        f"parameters={param_count}", flush=True,
+    )
+    started_at = time.monotonic()
     model.train()
     with log_path.open("w", newline="", encoding="utf-8") as stream:
         log = csv.writer(stream)
         log.writerow(["step", "train_loss", "val_loss", "val_perplexity"])
-        for step in range(1, args.steps + 1):
+        for step in range(1, total_steps + 1):
             optimizer.zero_grad(set_to_none=True)
             total_loss = 0.0
             for _ in range(args.grad_accum):
-                x, y = draw_batch(train_chunks, args.batch_size, model.block, device)
+                x, y = draw_batch(train_chunks, args.batch_size, model.block, device, sampler)
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
                     logits = model(x)
                     loss = nn.functional.cross_entropy(logits.float().reshape(-1, logits.size(-1)), y.reshape(-1))
@@ -223,12 +271,21 @@ def main():
             scaler.step(optimizer)
             scaler.update()
             completed_steps = step
-            if step == 1 or step % args.eval_interval == 0 or step == args.steps:
+            if step % args.log_interval == 0:
+                elapsed = time.monotonic() - started_at
+                rate = step / max(elapsed, 1e-6)
+                remaining = max(0, total_steps - step) / max(rate, 1e-6)
+                print(
+                    f"pretrain_progress step={step}/{total_steps} data_epochs={sampler.epochs_seen:.3f} "
+                    f"train_loss={total_loss:.4f} steps_per_sec={rate:.3f} eta_min={remaining / 60:.1f}",
+                    flush=True,
+                )
+            if step == 1 or step % args.eval_interval == 0 or step == total_steps:
                 val_loss = evaluate(model, val_chunks, args.batch_size, model.block, device, args.max_eval_chunks)
                 val_ppl = math.exp(val_loss) if val_loss < 50 else float("inf")
                 log.writerow([step, total_loss, val_loss, val_ppl])
                 stream.flush()
-                print(f"step={step} train_loss={total_loss:.4f} val_loss={val_loss:.4f} val_ppl={val_ppl:.2f}")
+                print(f"pretrain_eval step={step} train_loss={total_loss:.4f} val_loss={val_loss:.4f} val_ppl={val_ppl:.2f}", flush=True)
                 if val_loss < best_val:
                     best_val = val_loss
                     evaluations_without_improvement = 0
@@ -236,7 +293,7 @@ def main():
                 else:
                     evaluations_without_improvement += 1
                     if args.patience_evals > 0 and evaluations_without_improvement >= args.patience_evals:
-                        print(f"early stopping after {evaluations_without_improvement} evaluations without validation improvement")
+                        print(f"pretrain_early_stop step={step} no_improvement_evals={evaluations_without_improvement}", flush=True)
                         break
 
     summary = {
@@ -246,6 +303,10 @@ def main():
         "validation_chunks": len(val_chunks),
         "validation_chunks_evaluated": min(len(val_chunks), args.max_eval_chunks),
         "steps": completed_steps,
+        "steps_per_epoch": steps_per_epoch,
+        "data_epochs_seen": sampler.epochs_seen,
+        "training_tokens_seen": sampler.samples_seen * int(config["max_sequence_length"]),
+        "maximum_steps_configured": args.max_steps,
         "best_validation_loss": best_val,
         "scope": "defensive cybersecurity pilot; not a capability or safety certification",
     }

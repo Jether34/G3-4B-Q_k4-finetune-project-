@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import time
 import urllib.request
 from collections import Counter
 from pathlib import Path
@@ -151,68 +150,16 @@ def main() -> None:
             counters["trendyol_short_or_duplicate"] += 1
     counters["trendyol_rows"] = dump("trendyol_defensive_sft.jsonl", trendyol_rows)
 
-    # Keep language-only synthetic educational material modest so it helps
-    # basic syntax/word modeling without dominating the cyber-specific mix.
-    general = []
-    config_limits = {"auto_math_text": 500, "khanacademy": 500, "openstax": 500}
-    for config, limit in config_limits.items():
-        count = 0
-        config_rows = []
-        last_error = ""
-        for attempt in range(1, 4):
-            config_rows = []
-            try:
-                stream = load_dataset("HuggingFaceTB/cosmopedia", config, split="train", streaming=True)
-                for raw in stream:
-                    text = clean(raw.get("text", ""))
-                    if len(text) < 240:
-                        continue
-                    config_rows.append({
-                        "id": f"cosmopedia-{config}-{len(config_rows)}",
-                        "source": f"Cosmopedia {config} (Apache-2.0; synthetic general language)",
-                        "license": "Apache-2.0",
-                        "text": text[:12000],
-                    })
-                    if len(config_rows) >= limit:
-                        break
-                break
-            except Exception as error:
-                last_error = f"{type(error).__name__}: {error}"
-                counters[f"cosmopedia_{config}_retry_{attempt}"] += 1
-                time.sleep(attempt * 2)
-        if len(config_rows) < limit and config == "openstax":
-            # This subset is only ~0.5 GB. A cached, non-streaming read is a
-            # bounded fallback for transient streaming file-handle failures.
-            try:
-                full = load_dataset("HuggingFaceTB/cosmopedia", config, split="train")
-                config_rows = []
-                for raw in full:
-                    text = clean(raw.get("text", ""))
-                    if len(text) >= 240:
-                        config_rows.append({
-                            "id": f"cosmopedia-{config}-{len(config_rows)}",
-                            "source": f"Cosmopedia {config} (Apache-2.0; synthetic general language)",
-                            "license": "Apache-2.0",
-                            "text": text[:12000],
-                        })
-                        if len(config_rows) >= limit:
-                            break
-                last_error = ""
-            except Exception as error:
-                last_error = f"{type(error).__name__}: {error}"
-        general.extend(config_rows)
-        count = len(config_rows)
-        if count < limit:
-            counters[f"cosmopedia_{config}_shortfall"] = limit - count
-            counters[f"cosmopedia_{config}_last_error"] = last_error[:400]
-        counters[f"cosmopedia_{config}"] = count
-    counters["general_language_rows"] = dump("general_language_sample.jsonl", general)
+    # Cosmopedia was optional generic text. Its remote OpenStax shard triggered
+    # repeated Hugging Face file-descriptor retries in the active run. It adds
+    # little value beside the selected docs and Q&A, so do not fetch it at run time.
+    print("Skipping optional Cosmopedia download; cyber corpus and official references are sufficient for this pilot.", flush=True)
     summary = {
         "counts": dict(counters),
         "cti_categories_included": sorted(SAFE_CTI_CATEGORIES),
         "cti_train_only": True,
-        "cosmopedia_per_config_cap": config_limits,
-        "note": "Cosmopedia is generic language/math material, not cyber evidence. Threat Intelligence Dataset is CC BY-NC-SA 4.0; private/non-commercial research only unless rights are separately cleared.",
+        "cosmopedia": "skipped to avoid unneeded runtime downloads and retry loops",
+        "note": "Threat Intelligence Dataset is CC BY-NC-SA 4.0; private/non-commercial research only unless rights are separately cleared.",
     }
     (DATA / "additional_sources_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))
